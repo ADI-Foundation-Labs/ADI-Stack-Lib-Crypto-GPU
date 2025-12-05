@@ -1,11 +1,7 @@
 # zkSync Era: A ZK Rollup For Scaling Ethereum
 
-[![Logo](eraLogo.png)](https://zksync.io/)
-
-zkSync Era is a layer 2 rollup that uses zero-knowledge proofs to scale Ethereum without compromising on security or
-decentralization. Since it's EVM compatible (Solidity/Vyper), 99% of Ethereum projects can redeploy without refactoring
-or re-auditing a single line of code. zkSync Era also uses an LLVM-based compiler that will eventually let developers
-write smart contracts in C++, Rust and other popular languages.
+ADI Stack is a layer 2 rollup that uses zero-knowledge proofs to scale Ethereum without compromising on security or
+decentralization.
 
 ## Boojum-CUDA
 
@@ -24,7 +20,6 @@ See https://cmake.org/cmake/help/latest/variable/CMAKE_CUDA_ARCHITECTURES.html.
 
 ## Policies
 
-- [Security policy](SECURITY.md)
 - [Contribution policy](CONTRIBUTING.md)
 
 ## License
@@ -38,12 +33,13 @@ at your option.
 
 ## Official Links
 
-- [Website](https://zksync.io/)
-- [GitHub](https://github.com/matter-labs)
-- [ZK Credo](https://github.com/zksync/credo)
-- [Twitter](https://twitter.com/zksync)
-- [Twitter for Devs](https://twitter.com/zkSyncDevs)
-- [Discord](https://join.zksync.dev)
+- [Website](https://adi.foundation)
+- [Docs](https://docs.adi.foundation/)
+- [Github](https://github.com/ADI-Foundation-Labs/)
+- [X](https://x.com/adi_foundation)
+- [X for ADI Chain announcements](https://x.com/ADIChain_)
+- [LinkedIn](https://www.linkedin.com/company/adifoundation/)
+- [Discord](http://discord.gg/adi-foundation)
 
 ## Disclaimer
 
