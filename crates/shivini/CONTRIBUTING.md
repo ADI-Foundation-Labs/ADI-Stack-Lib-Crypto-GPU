@@ -5,7 +5,7 @@ sovereignty! We welcome contributions from anyone on the internet, and are grate
 
 ## Ways to contribute
 
-There are many ways to contribute to the ZK Stack:
+There are many ways to contribute to the ADI Stack:
 
 1. Open issues: if you find a bug, have something you believe needs to be fixed, or have an idea for a feature, please
    open an issue.
@@ -13,8 +13,6 @@ There are many ways to contribute to the ZK Stack:
    issues.
 3. Resolve issues: either by showing an issue isn't a problem and the current state is ok as is or by fixing the problem
    and opening a PR.
-4. Report security issues, see [our security policy](./github/SECURITY.md).
-5. [Join the team!](https://matterlabs.notion.site/Shape-the-future-of-Ethereum-at-Matter-Labs-dfb3b5a037044bb3a8006af2eb0575e0)
 
 ## Fixing issues
 
@@ -34,7 +32,7 @@ We aim to make it as easy as possible to contribute to the mission. This is stil
 and suggestions here too. Some resources to help:
 
 1. [In-repo docs aimed at developers](docs)
-2. [zkSync Era docs!](https://era.zksync.io/docs/)
+2. [ADI Stack docs!](https://docs.adi.foundation)
 3. Company links can be found in the [repo's readme](README.md)
 
 ## Code of Conduct

@@ -1,7 +1,5 @@
 # zkSync Era: A ZK Rollup For Scaling Ethereum
 
-[![Logo](eraLogo.png)](https://zksync.io/)
-
 zkSync Era is a layer 2 rollup that uses zero-knowledge proofs to scale Ethereum without compromising on security or
 decentralization. Since it's EVM compatible (Solidity/Vyper), 99% of Ethereum projects can redeploy without refactoring
 or re-auditing a single line of code. zkSync Era also uses an LLVM-based compiler that will eventually let developers
@@ -24,7 +22,6 @@ See https://cmake.org/cmake/help/latest/variable/CMAKE_CUDA_ARCHITECTURES.html.
 
 ## Policies
 
-- [Security policy](SECURITY.md)
 - [Contribution policy](CONTRIBUTING.md)
 
 ## License

@@ -9,7 +9,7 @@ In order to work with the workspace, you'll need.
 
 - [Cmake 3.24 or higher](https://apt.kitware.com/)
 - [CUDA toolkit 12.0 or higher](https://developer.nvidia.com/cuda-downloads)
-- [Bellman CUDA](github.com/matter-labs/matter-labs/era-bellman-cuda)
+- [Bellman CUDA](https://github.com/ADI-Foundation-Labs/ADI-Stack-Lib-Bellman-CUDA)
 
 For Bellman CUDA, clone it to a directory of your choice:
 
