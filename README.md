@@ -1,7 +1,7 @@
-# ZKsync GPU Acceleration for Cryptography
+# ADI Stack GPU Acceleration for Cryptography
 
 This repository contains the libraries aimed to provide
-GPU acceleration for cryptography used in ZKsync project.
+GPU acceleration for cryptography used in ADI Chain project.
 
 ## Setup
 
