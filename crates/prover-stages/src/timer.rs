@@ -47,11 +47,11 @@ impl StageTimer {
             return Proceed::Continue;
         }
 
-        tracing::info!(stage, prev, prev_ms, "gpu prover stage");
+        tracing::info!(stage, prev, prev_ms, "prover stage");
 
         let proceed = cancel::requested();
         if proceed.is_cancelled() {
-            tracing::info!(stage, "gpu prover cancelled at a stage boundary");
+            tracing::info!(stage, "prover cancelled at a stage boundary");
         }
         proceed
     }
@@ -66,7 +66,7 @@ impl StageTimer {
             prev = self.current,
             prev_ms = self.current.map(|_| millis(self.entered, now)),
             total_ms = millis(self.started, now),
-            "gpu prover finished"
+            "prover stage total"
         );
     }
 }
