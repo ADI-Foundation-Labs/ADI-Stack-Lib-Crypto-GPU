@@ -97,17 +97,20 @@ impl PlonkSnarkWrapper {
 
         let worker = bellman::worker::Worker::new();
         let start = std::time::Instant::now();
-        let proof =
-            gpu_prover::create_proof::<_, _, <Self as ProofSystemDefinition>::Transcript, _>(
-                &proving_assembly,
-                &mut ctx,
-                &worker,
-                &mut precomputation,
-                None,
-            )
-            .map_err(|e| {
-                anyhow::anyhow!("Failed to create proof for PlonkSnarkWrapper: {:?}", e)
-            })?;
+        let proof = gpu_prover::create_proof_cancellable::<
+            _,
+            _,
+            <Self as ProofSystemDefinition>::Transcript,
+            _,
+        >(
+            &proving_assembly,
+            &mut ctx,
+            &worker,
+            &mut precomputation,
+            None,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create proof for PlonkSnarkWrapper: {:?}", e))?
+        .ok_or_else(|| anyhow::anyhow!("PlonkSnarkWrapper proof cancelled"))?;
         println!("plonk proving takes {} s", start.elapsed().as_secs());
         ctx.free_all_slots();
 
