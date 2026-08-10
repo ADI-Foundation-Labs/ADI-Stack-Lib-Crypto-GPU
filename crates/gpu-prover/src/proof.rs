@@ -1,6 +1,7 @@
 use super::*;
 
 use cuda_bindings::GpuError;
+use prover_stages::StageTimer;
 
 pub fn create_proof<
     S: SynthesisMode + 'static,
@@ -20,6 +21,9 @@ pub fn create_proof<
     //     assign_cs_variables(manager, assembly, worker)?;
     // }
 
+    let mut stages = StageTimer::new();
+
+    stages.enter("assignments_and_permutations");
     compute_assigments_and_permutations(manager, assembly, worker)?;
 
     let (mut proof, mut transcript, mut constants, input_values) =
@@ -27,6 +31,7 @@ pub fn create_proof<
 
     let mut msm_handles_round1 = vec![];
 
+    stages.enter("round1");
     // dbg!(1);
     round1(
         manager,
@@ -39,6 +44,7 @@ pub fn create_proof<
     )
     .expect("Round 1 failed");
 
+    stages.enter("round15");
     // dbg!(1.5);
     round15(
         manager,
@@ -52,6 +58,7 @@ pub fn create_proof<
     )
     .expect("Round 1.5 failed");
 
+    stages.enter("round2");
     // dbg!(2);
     round2(
         manager,
@@ -65,6 +72,7 @@ pub fn create_proof<
     )
     .expect("Round 2 failed");
 
+    stages.enter("round3");
     // dbg!(3);
     round3(
         manager,
@@ -77,10 +85,14 @@ pub fn create_proof<
     )
     .expect("Round 3 failed");
 
+    stages.enter("round4");
     round4::<_, _, S, _>(manager, &mut proof, &mut constants, &mut transcript)
         .expect("Round 4 failed");
 
+    stages.enter("round5");
     round5(manager, &mut proof, &mut constants, &mut transcript).expect("Round 5 failed");
+
+    stages.finish();
 
     Ok(proof)
 }

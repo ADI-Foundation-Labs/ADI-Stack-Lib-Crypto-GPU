@@ -29,6 +29,7 @@ use boojum::{
     worker::Worker,
 };
 use era_cudart::slice::CudaSlice;
+use prover_stages::StageTimer;
 
 pub fn gpu_prove_from_external_witness_data<
     TR: Transcript<F, CompatibleCap: Hash>,
@@ -81,7 +82,8 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
     worker: &Worker,
     cache_strategy: CacheStrategy,
 ) -> CudaResult<GpuProof<H, A>> {
-    let mut timer = std::time::Instant::now();
+    let mut stages = stage_timer()?;
+    stages.enter("setup");
     let result = {
         assert!(
             is_prover_context_initialized(),
@@ -109,10 +111,7 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
             max_lde_degree,
             worker,
         )?;
-        if !is_dry_run()? {
-            println!("◆ setup: {:?}", timer.elapsed());
-        }
-        timer = std::time::Instant::now();
+        stages.enter("proof");
         let trace_layout = TraceLayout {
             num_variable_cols,
             num_witness_cols,
@@ -220,10 +219,16 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
             worker,
         )
     };
-    if !is_dry_run()? {
-        println!("◆ proof: {:?}", timer.elapsed());
-    }
+    stages.finish();
     result
+}
+
+/// A timer that stays quiet on the dry run pass, which sizes allocations rather than proving.
+fn stage_timer() -> CudaResult<StageTimer> {
+    if is_dry_run()? {
+        return Ok(StageTimer::silent());
+    }
+    Ok(StageTimer::new())
 }
 
 pub fn compute_quotient_degree(config: &GpuProofConfig, selectors_placement: &TreeNode) -> usize {
@@ -279,6 +284,9 @@ fn gpu_prove_from_trace<
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
 ) -> CudaResult<GpuProof<H, A>> {
+    let mut stages = stage_timer()?;
+    stages.enter("trace_commitment");
+
     let geometry = vk.fixed_parameters.clone();
     let domain_size = geometry.domain_size as usize;
     let lookup_parameters = geometry.lookup_parameters;
@@ -330,6 +338,7 @@ fn gpu_prove_from_trace<
     let trace_tree_cap = trace_cache.get_tree_cap();
     // TODO: use cuda callback for transcript
     transcript.witness_merkle_tree_cap(&trace_tree_cap);
+    stages.enter("lookup_argument");
 
     let h_beta = if is_dry_run()? {
         [F::ZERO; 2]
@@ -500,6 +509,7 @@ fn gpu_prove_from_trace<
     arguments_cache.initialize_from_evaluations(Rc::new(argument_raw_storage))?;
     let argument_tree_cap = arguments_cache.get_tree_cap();
     transcript.witness_merkle_tree_cap(&argument_tree_cap);
+    stages.enter("quotient");
 
     let h_alpha = if is_dry_run()? {
         [F::ZERO; 2]
@@ -639,6 +649,7 @@ fn gpu_prove_from_trace<
     quotient_cache.initialize_from_monomials(Rc::new(quotient_monomials_storage))?;
     let quotient_tree_cap = quotient_cache.get_tree_cap();
     transcript.witness_merkle_tree_cap(&quotient_tree_cap);
+    stages.enter("openings");
 
     // deep part
     let h_z = if is_dry_run()? {
@@ -735,6 +746,7 @@ fn gpu_prove_from_trace<
     let mut challenges = svec!(h_challenges.len());
     challenges.copy_from_slice(&h_challenges)?;
 
+    stages.enter("deep_quotient");
     let mut deep_quotient = vec![];
     let z = h_z.into();
     let z_omega = h_z_omega.into();
@@ -784,6 +796,7 @@ fn gpu_prove_from_trace<
 
     let first_codeword = CodeWord::new_base(deep_quotient);
 
+    stages.enter("fri");
     let (mut fri_holder, final_fri_monomials) = compute_fri::<_, H>(
         first_codeword,
         &mut transcript,
@@ -795,6 +808,7 @@ fn gpu_prove_from_trace<
     )?;
     assert_eq!(final_fri_monomials[0].len(), final_expected_degree);
     assert_eq!(final_fri_monomials[1].len(), final_expected_degree);
+    stages.enter("pow");
     let pow_challenge = if new_pow_bits != 0 && !is_dry_run()? {
         const SEED_BITS: usize = 256;
         // pull enough challenges from the transcript
@@ -816,6 +830,7 @@ fn gpu_prove_from_trace<
         0
     };
 
+    stages.enter("queries");
     use boojum::cs::implementations::transcript::BoolsBuffer;
     let max_needed_bits = (domain_size * fri_lde_degree).trailing_zeros() as usize;
     // let mut bools_buffer = BoolsBuffer::new(max_needed_bits);
@@ -946,6 +961,7 @@ fn gpu_prove_from_trace<
     }
 
     synchronize_streams()?;
+    stages.finish();
     #[cfg(feature = "allocator_stats")]
     {
         println!("block size in bytes: {}", _alloc().block_size_in_bytes);

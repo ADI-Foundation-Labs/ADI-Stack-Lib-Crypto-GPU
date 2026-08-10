@@ -24,6 +24,7 @@ fflonk = { version = "=0.155.2", path = "crates/fflonk", package = "fflonk-cuda"
 gpu-ffi = { version = "=0.155.2", path = "crates/gpu-ffi", package = "zksync-gpu-ffi" }
 gpu-ffi-bindings-generator = { version = "=0.155.2", path = "crates/gpu-ffi", package = "zksync-gpu-ffi-bindings-generator" }
 gpu-prover = { version = "=0.155.2", path = "crates/gpu-prover", package = "zksync-gpu-prover" }
+prover-stages = { version = "=0.155.2", path = "crates/prover-stages", package = "zksync-prover-stages" }
 shivini = { version = "=0.155.2", path = "crates/shivini" }
 wrapper-prover = { version = "=0.155.2", path = "crates/wrapper-prover", package = "zksync-wrapper-prover" }
 
@@ -38,6 +39,9 @@ snark_wrapper = "=0.32.5"
 # zksync-protocol repository
 circuit_definitions = { version = "=0.153.3" }
 zkevm_test_harness = { version = "=0.153.3" }
+
+# external
+tracing = "0.1"
 
 [profile.release]
 debug = "line-tables-only"
