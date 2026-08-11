@@ -56,6 +56,16 @@ impl StageTimer {
         proceed
     }
 
+    /// Reports entry into `stage`; `None` means a cancel was requested and proving
+    /// should stop. The `?`-friendly form of [`StageTimer::enter`].
+    #[must_use]
+    pub fn step(&mut self, stage: &'static str) -> Option<()> {
+        if self.enter(stage).is_cancelled() {
+            return None;
+        }
+        Some(())
+    }
+
     /// Reports the last stage closing and the total elapsed.
     pub fn finish(self) {
         if !self.enabled {

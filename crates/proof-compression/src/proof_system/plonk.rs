@@ -1,3 +1,4 @@
+use anyhow::Context;
 use bellman::{
     kate_commitment::{Crs, CrsForMonomialForm},
     plonk::{
@@ -83,24 +84,34 @@ impl PlonkSnarkWrapper {
         let mut stages = StageTimer::new();
         let input_vk = setup_data_cache.previous_vk;
 
-        stage(&mut stages, "snark_init_context")?;
+        stages
+            .step("snark_init_context")
+            .context("PlonkSnarkWrapper cancelled")?;
         let mut ctx = Self::init_context(&setup_data_cache.crs)?.into_inner();
         let finalization_hint = setup_data_cache.finalization_hint;
 
-        stage(&mut stages, "snark_build_circuit")?;
+        stages
+            .step("snark_build_circuit")
+            .context("PlonkSnarkWrapper cancelled")?;
         let circuit = Self::build_circuit(input_vk.clone(), Some(input_proof));
 
-        stage(&mut stages, "snark_synthesize")?;
+        stages
+            .step("snark_synthesize")
+            .context("PlonkSnarkWrapper cancelled")?;
         let mut proving_assembly =
             <Self as SnarkWrapperProofSystem>::synthesize_for_proving(circuit);
         let vk = setup_data_cache.vk;
         let mut precomputation = setup_data_cache.precomputation.into_inner();
 
-        stage(&mut stages, "snark_is_satisfied")?;
+        stages
+            .step("snark_is_satisfied")
+            .context("PlonkSnarkWrapper cancelled")?;
         anyhow::ensure!(proving_assembly.is_satisfied());
         anyhow::ensure!(finalization_hint.is_power_of_two());
 
-        stage(&mut stages, "snark_finalize")?;
+        stages
+            .step("snark_finalize")
+            .context("PlonkSnarkWrapper cancelled")?;
         proving_assembly.finalize_to_size_log_2(finalization_hint.trailing_zeros() as usize);
         let domain_size = proving_assembly.n() + 1;
         anyhow::ensure!(domain_size.is_power_of_two());
@@ -295,13 +306,4 @@ impl SnarkWrapperProofSystemExt for PlonkSnarkWrapper {
     ) -> anyhow::Result<(Self::Precomputation, Self::VK)> {
         unimplemented!()
     }
-}
-
-/// Reports a stage boundary, turning a requested cancel into an error the `?` path carries.
-fn stage(stages: &mut StageTimer, name: &'static str) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !stages.enter(name).is_cancelled(),
-        "PlonkSnarkWrapper cancelled at {name}"
-    );
-    Ok(())
 }
