@@ -176,7 +176,9 @@ where
             cache_strategy,
         )
         .context("failed to generate gpu compression proof")?
-        .context("gpu compression proof cancelled")?;
+        .ok_or(prover_stages::Cancelled {
+            stage: "gpu_compression_proof",
+        })?;
         drop(ctx);
         let proof = gpu_proof.into();
 

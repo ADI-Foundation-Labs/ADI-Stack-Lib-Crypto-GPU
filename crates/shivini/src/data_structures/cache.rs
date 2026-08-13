@@ -14,6 +14,7 @@ use boojum::cs::implementations::witness::WitnessVec;
 use boojum::worker::Worker;
 use era_cudart_sys::CudaError::ErrorMemoryAllocation;
 use itertools::Itertools;
+use prover_stages::StageTimer;
 use std::collections::BTreeMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Deref;
@@ -745,18 +746,27 @@ impl CacheStrategy {
         vk: &VerificationKey<F, H>,
         transcript_params: TR::TransciptParameters,
         worker: &Worker,
-    ) -> CudaResult<Self> {
+        stages: &mut StageTimer,
+    ) -> CudaResult<Option<Self>> {
         let cap = &vk.setup_merkle_tree_cap;
         let mut hasher = DefaultHasher::new();
         Hash::hash_slice(cap, &mut hasher);
         let cap_hash = hasher.finish();
         if let Some(strategy) = _strategy_cache_get().get(&cap_hash) {
-            println!("reusing cache strategy");
-            Ok(*strategy)
+            tracing::info!("reusing cache strategy");
+            Ok(Some(*strategy))
         } else {
+            if stages.enter("cache_strategy").is_cancelled() {
+                return Ok(None);
+            }
             let strategies =
                 Self::get_strategy_candidates(config, &proof_config, setup, &vk.fixed_parameters);
             for (_, strategy) in strategies.iter().copied() {
+                // Each candidate is a full dry run, so re-check rather than make the whole
+                // search uncancellable.
+                if stages.check().is_cancelled() {
+                    return Ok(None);
+                }
                 _setup_cache_reset();
                 dry_run_start();
                 let result =
@@ -774,9 +784,9 @@ impl CacheStrategy {
                 let result = result.and(dry_run_stop());
                 match result {
                     Ok(_) => {
-                        println!("determined cache strategy: {:?}", strategy);
+                        tracing::info!(?strategy, "determined cache strategy");
                         _strategy_cache_get().insert(cap_hash, strategy);
-                        return Ok(strategy);
+                        return Ok(Some(strategy));
                     }
                     Err(ErrorMemoryAllocation) => {
                         continue;
