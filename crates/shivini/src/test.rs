@@ -816,6 +816,7 @@ mod zksync {
     };
     use era_cudart::memory::memory_get_info;
     use era_cudart_sys::CudaError;
+    use prover_stages::StageTimer;
     use serde::{Deserialize, Serialize};
     use synthesis_utils::synthesize_compression_circuit;
 
@@ -2069,12 +2070,13 @@ mod zksync {
                         &vk,
                         (),
                         worker,
+                        &mut StageTimer::uncancellable(),
                     );
                 // technically not needed because CacheStrategy::get calls it internally,
                 // but nice for peace of mind
                 _setup_cache_reset();
                 let strategy = match strategy {
-                    Ok(s) => s,
+                    Ok(s) => s.expect("an uncancellable StageTimer never stops the search"),
                     Err(CudaError::ErrorMemoryAllocation) => {
                         println!("no cache strategy for {num_blocks}  found");
                         return;

@@ -160,7 +160,7 @@ where
         };
         let worker = Worker::new();
         let precomputation = precomputation.into_inner_ref();
-        let gpu_proof = shivini::gpu_prove_from_external_witness_data_with_cache_strategy::<
+        let gpu_proof = shivini::gpu_prove_with_cache_strategy_cancellable::<
             CF::ThisLayerTranscript,
             CF::ThisLayerHasher,
             CF::ThisLayerPoW,
@@ -175,7 +175,10 @@ where
             &worker,
             cache_strategy,
         )
-        .context("failed to generate gpu compression proof")?;
+        .context("failed to generate gpu compression proof")?
+        .ok_or(prover_stages::Cancelled {
+            stage: "gpu_compression_proof",
+        })?;
         drop(ctx);
         let proof = gpu_proof.into();
 

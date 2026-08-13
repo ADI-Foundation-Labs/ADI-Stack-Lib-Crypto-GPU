@@ -71,4 +71,7 @@ pub use data_structures::PolynomialsCacheStrategy;
 pub use pow::GPUPoWRunner;
 pub use primitives::tree::GpuTreeHasher;
 pub use prover::gpu_prove_from_external_witness_data;
+pub use prover::gpu_prove_from_external_witness_data_cancellable;
 pub use prover::gpu_prove_from_external_witness_data_with_cache_strategy;
+pub use prover::gpu_prove_with_cache_strategy_cancellable;
+pub use prover_stages;

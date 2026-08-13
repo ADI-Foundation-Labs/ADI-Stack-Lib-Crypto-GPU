@@ -29,6 +29,7 @@ use boojum::{
     worker::Worker,
 };
 use era_cudart::slice::CudaSlice;
+use prover_stages::StageTimer;
 
 pub fn gpu_prove_from_external_witness_data<
     TR: Transcript<F, CompatibleCap: Hash>,
@@ -44,7 +45,69 @@ pub fn gpu_prove_from_external_witness_data<
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
 ) -> CudaResult<GpuProof<H, A>> {
-    let cache_strategy = CacheStrategy::get::<TR, H, POW, A>(
+    let mut stages = stage_timer(Cancellation::Off)?;
+    let proof = prove_from_witness_data::<TR, H, POW, A>(
+        config,
+        external_witness_data,
+        proof_config,
+        setup,
+        vk,
+        transcript_params,
+        worker,
+        &mut stages,
+    )?;
+    stages.finish();
+    Ok(require_proof(proof))
+}
+
+/// As [`gpu_prove_from_external_witness_data`], but returns `None` when a cancel was
+/// requested through [`prover_stages::cancel`] and proving stopped at a stage boundary.
+pub fn gpu_prove_from_external_witness_data_cancellable<
+    TR: Transcript<F, CompatibleCap: Hash>,
+    H: GpuTreeHasher<Output = TR::CompatibleCap>,
+    POW: GPUPoWRunner,
+    A: GoodAllocator,
+>(
+    config: &GpuProofConfig,
+    external_witness_data: &WitnessVec<F>,
+    proof_config: ProofConfig,
+    setup: &GpuSetup<H>,
+    vk: &VerificationKey<F, H>,
+    transcript_params: TR::TransciptParameters,
+    worker: &Worker,
+) -> CudaResult<Option<GpuProof<H, A>>> {
+    let mut stages = stage_timer(Cancellation::On)?;
+    let proof = prove_from_witness_data::<TR, H, POW, A>(
+        config,
+        external_witness_data,
+        proof_config,
+        setup,
+        vk,
+        transcript_params,
+        worker,
+        &mut stages,
+    )?;
+    stages.finish();
+    Ok(proof)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prove_from_witness_data<
+    TR: Transcript<F, CompatibleCap: Hash>,
+    H: GpuTreeHasher<Output = TR::CompatibleCap>,
+    POW: GPUPoWRunner,
+    A: GoodAllocator,
+>(
+    config: &GpuProofConfig,
+    external_witness_data: &WitnessVec<F>,
+    proof_config: ProofConfig,
+    setup: &GpuSetup<H>,
+    vk: &VerificationKey<F, H>,
+    transcript_params: TR::TransciptParameters,
+    worker: &Worker,
+    stages: &mut StageTimer,
+) -> CudaResult<Option<GpuProof<H, A>>> {
+    let Some(cache_strategy) = CacheStrategy::get::<TR, H, POW, A>(
         config,
         external_witness_data,
         proof_config.clone(),
@@ -52,8 +115,12 @@ pub fn gpu_prove_from_external_witness_data<
         vk,
         transcript_params.clone(),
         worker,
-    )?;
-    gpu_prove_from_external_witness_data_with_cache_strategy::<TR, H, POW, A>(
+        stages,
+    )?
+    else {
+        return Ok(None);
+    };
+    prove_with_cache_strategy::<TR, H, POW, A>(
         config,
         external_witness_data,
         proof_config,
@@ -62,11 +129,46 @@ pub fn gpu_prove_from_external_witness_data<
         transcript_params,
         worker,
         cache_strategy,
+        stages,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
+    TR: Transcript<F>,
+    H: GpuTreeHasher<Output = TR::CompatibleCap>,
+    POW: GPUPoWRunner,
+    A: GoodAllocator,
+>(
+    config: &GpuProofConfig,
+    external_witness_data: &WitnessVec<F>,
+    proof_config: ProofConfig,
+    setup: &GpuSetup<H>,
+    vk: &VerificationKey<F, H>,
+    transcript_params: TR::TransciptParameters,
+    worker: &Worker,
+    cache_strategy: CacheStrategy,
+) -> CudaResult<GpuProof<H, A>> {
+    let mut stages = stage_timer(Cancellation::Off)?;
+    let proof = prove_with_cache_strategy::<TR, H, POW, A>(
+        config,
+        external_witness_data,
+        proof_config,
+        setup,
+        vk,
+        transcript_params,
+        worker,
+        cache_strategy,
+        &mut stages,
+    )?;
+    stages.finish();
+    Ok(require_proof(proof))
+}
+
+/// As [`gpu_prove_from_external_witness_data_with_cache_strategy`], but returns `None`
+/// when proving stopped at a stage boundary because a cancel was requested.
+#[allow(clippy::too_many_arguments)]
+pub fn gpu_prove_with_cache_strategy_cancellable<
     TR: Transcript<F>,
     H: GpuTreeHasher<Output = TR::CompatibleCap>,
     POW: GPUPoWRunner,
@@ -80,8 +182,43 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
     cache_strategy: CacheStrategy,
-) -> CudaResult<GpuProof<H, A>> {
-    let mut timer = std::time::Instant::now();
+) -> CudaResult<Option<GpuProof<H, A>>> {
+    let mut stages = stage_timer(Cancellation::On)?;
+    let proof = prove_with_cache_strategy::<TR, H, POW, A>(
+        config,
+        external_witness_data,
+        proof_config,
+        setup,
+        vk,
+        transcript_params,
+        worker,
+        cache_strategy,
+        &mut stages,
+    )?;
+    stages.finish();
+    Ok(proof)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prove_with_cache_strategy<
+    TR: Transcript<F>,
+    H: GpuTreeHasher<Output = TR::CompatibleCap>,
+    POW: GPUPoWRunner,
+    A: GoodAllocator,
+>(
+    config: &GpuProofConfig,
+    external_witness_data: &WitnessVec<F>, // TODO: read data from Assembly pinned storage
+    proof_config: ProofConfig,
+    setup: &GpuSetup<H>,
+    vk: &VerificationKey<F, H>,
+    transcript_params: TR::TransciptParameters,
+    worker: &Worker,
+    cache_strategy: CacheStrategy,
+    stages: &mut StageTimer,
+) -> CudaResult<Option<GpuProof<H, A>>> {
+    if stages.enter("setup").is_cancelled() {
+        return Ok(None);
+    }
     let result = {
         assert!(
             is_prover_context_initialized(),
@@ -109,10 +246,9 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
             max_lde_degree,
             worker,
         )?;
-        if !is_dry_run()? {
-            println!("◆ setup: {:?}", timer.elapsed());
+        if stages.enter("trace_setup").is_cancelled() {
+            return Ok(None);
         }
-        timer = std::time::Instant::now();
         let trace_layout = TraceLayout {
             num_variable_cols,
             num_witness_cols,
@@ -218,12 +354,37 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
             vk,
             transcript_params,
             worker,
+            stages,
         )
     };
-    if !is_dry_run()? {
-        println!("◆ proof: {:?}", timer.elapsed());
-    }
     result
+}
+
+/// Whether a run's timer honours a cancel request. The entry points that return the proof
+/// itself pick `Off`, since a cancel would have nowhere to go in their return type.
+#[derive(Clone, Copy)]
+enum Cancellation {
+    On,
+    Off,
+}
+
+/// A timer that stays quiet on the dry run pass, which sizes allocations rather than proving.
+fn stage_timer(cancellation: Cancellation) -> CudaResult<StageTimer> {
+    if is_dry_run()? {
+        return Ok(StageTimer::silent());
+    }
+    match cancellation {
+        Cancellation::On => Ok(StageTimer::new()),
+        Cancellation::Off => Ok(StageTimer::uncancellable()),
+    }
+}
+
+/// The entry points that build a [`Cancellation::Off`] timer can never be handed `None`.
+/// Funnelling them through here keeps that invariant in one place instead of three.
+fn require_proof<H: GpuTreeHasher, A: GoodAllocator>(
+    proof: Option<GpuProof<H, A>>,
+) -> GpuProof<H, A> {
+    proof.expect("an uncancellable StageTimer never stops proving")
 }
 
 pub fn compute_quotient_degree(config: &GpuProofConfig, selectors_placement: &TreeNode) -> usize {
@@ -278,7 +439,12 @@ fn gpu_prove_from_trace<
     vk: &VerificationKey<F, H>,
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
-) -> CudaResult<GpuProof<H, A>> {
+    stages: &mut StageTimer,
+) -> CudaResult<Option<GpuProof<H, A>>> {
+    if stages.enter("trace_commitment").is_cancelled() {
+        return Ok(None);
+    }
+
     let geometry = vk.fixed_parameters.clone();
     let domain_size = geometry.domain_size as usize;
     let lookup_parameters = geometry.lookup_parameters;
@@ -330,6 +496,9 @@ fn gpu_prove_from_trace<
     let trace_tree_cap = trace_cache.get_tree_cap();
     // TODO: use cuda callback for transcript
     transcript.witness_merkle_tree_cap(&trace_tree_cap);
+    if stages.enter("lookup_argument").is_cancelled() {
+        return Ok(None);
+    }
 
     let h_beta = if is_dry_run()? {
         [F::ZERO; 2]
@@ -500,6 +669,9 @@ fn gpu_prove_from_trace<
     arguments_cache.initialize_from_evaluations(Rc::new(argument_raw_storage))?;
     let argument_tree_cap = arguments_cache.get_tree_cap();
     transcript.witness_merkle_tree_cap(&argument_tree_cap);
+    if stages.enter("quotient").is_cancelled() {
+        return Ok(None);
+    }
 
     let h_alpha = if is_dry_run()? {
         [F::ZERO; 2]
@@ -639,6 +811,9 @@ fn gpu_prove_from_trace<
     quotient_cache.initialize_from_monomials(Rc::new(quotient_monomials_storage))?;
     let quotient_tree_cap = quotient_cache.get_tree_cap();
     transcript.witness_merkle_tree_cap(&quotient_tree_cap);
+    if stages.enter("openings").is_cancelled() {
+        return Ok(None);
+    }
 
     // deep part
     let h_z = if is_dry_run()? {
@@ -735,6 +910,9 @@ fn gpu_prove_from_trace<
     let mut challenges = svec!(h_challenges.len());
     challenges.copy_from_slice(&h_challenges)?;
 
+    if stages.enter("deep_quotient").is_cancelled() {
+        return Ok(None);
+    }
     let mut deep_quotient = vec![];
     let z = h_z.into();
     let z_omega = h_z_omega.into();
@@ -784,6 +962,9 @@ fn gpu_prove_from_trace<
 
     let first_codeword = CodeWord::new_base(deep_quotient);
 
+    if stages.enter("fri").is_cancelled() {
+        return Ok(None);
+    }
     let (mut fri_holder, final_fri_monomials) = compute_fri::<_, H>(
         first_codeword,
         &mut transcript,
@@ -795,6 +976,9 @@ fn gpu_prove_from_trace<
     )?;
     assert_eq!(final_fri_monomials[0].len(), final_expected_degree);
     assert_eq!(final_fri_monomials[1].len(), final_expected_degree);
+    if stages.enter("pow").is_cancelled() {
+        return Ok(None);
+    }
     let pow_challenge = if new_pow_bits != 0 && !is_dry_run()? {
         const SEED_BITS: usize = 256;
         // pull enough challenges from the transcript
@@ -816,6 +1000,9 @@ fn gpu_prove_from_trace<
         0
     };
 
+    if stages.enter("queries").is_cancelled() {
+        return Ok(None);
+    }
     use boojum::cs::implementations::transcript::BoolsBuffer;
     let max_needed_bits = (domain_size * fri_lde_degree).trailing_zeros() as usize;
     // let mut bools_buffer = BoolsBuffer::new(max_needed_bits);
@@ -969,7 +1156,7 @@ fn gpu_prove_from_trace<
         .collect();
     gpu_proof.final_fri_monomials = final_fri_monomials;
 
-    Ok(gpu_proof)
+    Ok(Some(gpu_proof))
 }
 
 pub struct GpuProof<H: GpuTreeHasher, A: GoodAllocator> {

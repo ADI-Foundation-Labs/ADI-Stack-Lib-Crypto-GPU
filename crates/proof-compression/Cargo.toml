@@ -15,6 +15,7 @@ exclude = ["/data"]
 circuit_definitions.workspace = true
 fflonk = {workspace = true, optional = true}
 shivini.workspace = true
+prover-stages.workspace = true
 gpu-prover = { workspace = true, optional = true}
 serde = "1"
 serde_json = "1"

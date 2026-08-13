@@ -1,0 +1,15 @@
+[package]
+edition.workspace = true
+authors.workspace = true
+homepage.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+repository.workspace = true
+version.workspace = true
+name = "zksync-prover-stages"
+description = "Per-stage progress reporting for the ZKsync GPU provers"
+
+[dependencies]
+thiserror.workspace = true
+tracing.workspace = true

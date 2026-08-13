@@ -13,6 +13,7 @@ use bellman::{
 };
 use circuit_definitions::circuit_definitions::aux_layer::ZkSyncSnarkWrapperCircuit;
 use gpu_prover::{AsyncSetup, DeviceMemoryManager, ManagerConfigs};
+use prover_stages::{Cancelled, StageTimer};
 
 use franklin_crypto::boojum::cs::{
     implementations::proof::Proof, implementations::verifier::VerificationKey,
@@ -79,39 +80,55 @@ impl PlonkSnarkWrapper {
         setup_data_cache: SnarkWrapperSetupData<Self>,
     ) -> anyhow::Result<<Self as ProofSystemDefinition>::Proof> {
         anyhow::ensure!(Self::IS_FFLONK ^ Self::IS_PLONK);
+        let mut stages = StageTimer::new();
         let input_vk = setup_data_cache.previous_vk;
+
+        stages.step("snark_init_context")?;
         let mut ctx = Self::init_context(&setup_data_cache.crs)?.into_inner();
         let finalization_hint = setup_data_cache.finalization_hint;
+
+        stages.step("snark_build_circuit")?;
         let circuit = Self::build_circuit(input_vk.clone(), Some(input_proof));
+
+        stages.step("snark_synthesize")?;
         let mut proving_assembly =
             <Self as SnarkWrapperProofSystem>::synthesize_for_proving(circuit);
         let vk = setup_data_cache.vk;
         let mut precomputation = setup_data_cache.precomputation.into_inner();
 
+        stages.step("snark_is_satisfied")?;
         anyhow::ensure!(proving_assembly.is_satisfied());
         anyhow::ensure!(finalization_hint.is_power_of_two());
+
+        stages.step("snark_finalize")?;
         proving_assembly.finalize_to_size_log_2(finalization_hint.trailing_zeros() as usize);
         let domain_size = proving_assembly.n() + 1;
         anyhow::ensure!(domain_size.is_power_of_two());
         anyhow::ensure!(domain_size == finalization_hint.clone());
 
         let worker = bellman::worker::Worker::new();
-        let start = std::time::Instant::now();
-        let proof =
-            gpu_prover::create_proof::<_, _, <Self as ProofSystemDefinition>::Transcript, _>(
-                &proving_assembly,
-                &mut ctx,
-                &worker,
-                &mut precomputation,
-                None,
-            )
-            .map_err(|e| {
-                anyhow::anyhow!("Failed to create proof for PlonkSnarkWrapper: {:?}", e)
-            })?;
-        println!("plonk proving takes {} s", start.elapsed().as_secs());
+        stages.step("snark_prove")?;
+        let proof = gpu_prover::create_proof_cancellable::<
+            _,
+            _,
+            <Self as ProofSystemDefinition>::Transcript,
+            _,
+        >(
+            &proving_assembly,
+            &mut ctx,
+            &worker,
+            &mut precomputation,
+            None,
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create proof for PlonkSnarkWrapper: {:?}", e))?
+        .ok_or(Cancelled {
+            stage: "snark_prove",
+        })?;
         ctx.free_all_slots();
 
+        stages.step("snark_verify")?;
         anyhow::ensure!(<Self as ProofSystemDefinition>::verify(&proof, &vk));
+        stages.finish();
 
         Ok(proof)
     }
