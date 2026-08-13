@@ -3,5 +3,5 @@
 pub mod cancel;
 mod timer;
 
-pub use cancel::Proceed;
+pub use cancel::{Cancelled, Proceed};
 pub use timer::StageTimer;

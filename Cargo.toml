@@ -41,6 +41,7 @@ circuit_definitions = { version = "=0.153.3" }
 zkevm_test_harness = { version = "=0.153.3" }
 
 # external
+thiserror = "2"
 tracing = "0.1"
 
 [profile.release]
