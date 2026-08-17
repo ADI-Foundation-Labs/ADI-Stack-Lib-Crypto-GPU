@@ -16,19 +16,24 @@ pub fn create_proof<
     transcript_params: Option<T::InitializationParameters>,
 ) -> Result<Proof<Bn256, C>, ProvingError> {
     // The uncancellable timer never stops proving, so `None` cannot reach here.
-    prove::<S, C, T, MC>(
+    let mut stages = StageTimer::uncancellable();
+    let proof = prove::<S, C, T, MC>(
         assembly,
         manager,
         worker,
         setup,
         transcript_params,
-        StageTimer::uncancellable(),
-    )
-    .map(|proof| proof.expect("an uncancellable StageTimer never stops proving"))
+        &mut stages,
+    )?;
+    stages.finish();
+    Ok(proof.expect("an uncancellable StageTimer never stops proving"))
 }
 
 /// As [`create_proof`], but returns `None` when proving stopped between rounds because a
 /// cancel was requested through [`prover_stages::cancel`].
+///
+/// The timer is the caller's, so these rounds join the caller's timeline rather than
+/// opening a second one, and the caller's cancel baseline covers this run.
 pub fn create_proof_cancellable<
     S: SynthesisMode + 'static,
     C: Circuit<Bn256>,
@@ -40,15 +45,9 @@ pub fn create_proof_cancellable<
     worker: &Worker,
     setup: &AsyncSetup,
     transcript_params: Option<T::InitializationParameters>,
+    stages: &mut StageTimer,
 ) -> Result<Option<Proof<Bn256, C>>, ProvingError> {
-    prove::<S, C, T, MC>(
-        assembly,
-        manager,
-        worker,
-        setup,
-        transcript_params,
-        StageTimer::new(),
-    )
+    prove::<S, C, T, MC>(assembly, manager, worker, setup, transcript_params, stages)
 }
 
 fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: ManagerConfigs>(
@@ -57,7 +56,7 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     worker: &Worker,
     setup: &AsyncSetup,
     transcript_params: Option<T::InitializationParameters>,
-    mut stages: StageTimer,
+    stages: &mut StageTimer,
 ) -> Result<Option<Proof<Bn256, C>>, ProvingError> {
     // if S::PRODUCE_SETUP {
     //     compute_assigments_and_permutations(manager, assembly, worker)?;
@@ -66,7 +65,6 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     // }
 
     if stages.enter("assignments_and_permutations").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     compute_assigments_and_permutations(manager, assembly, worker)?;
@@ -77,7 +75,6 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     let mut msm_handles_round1 = vec![];
 
     if stages.enter("round1").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     // dbg!(1);
@@ -93,7 +90,6 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     .expect("Round 1 failed");
 
     if stages.enter("round15").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     // dbg!(1.5);
@@ -110,7 +106,6 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     .expect("Round 1.5 failed");
 
     if stages.enter("round2").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     // dbg!(2);
@@ -127,7 +122,6 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     .expect("Round 2 failed");
 
     if stages.enter("round3").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     // dbg!(3);
@@ -143,19 +137,15 @@ fn prove<S: SynthesisMode + 'static, C: Circuit<Bn256>, T: Transcript<Fr>, MC: M
     .expect("Round 3 failed");
 
     if stages.enter("round4").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     round4::<_, _, S, _>(manager, &mut proof, &mut constants, &mut transcript)
         .expect("Round 4 failed");
 
     if stages.enter("round5").is_cancelled() {
-        stages.finish();
         return Ok(None);
     }
     round5(manager, &mut proof, &mut constants, &mut transcript).expect("Round 5 failed");
-
-    stages.finish();
 
     Ok(Some(proof))
 }

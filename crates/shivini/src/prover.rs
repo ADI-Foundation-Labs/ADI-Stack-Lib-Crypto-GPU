@@ -45,7 +45,7 @@ pub fn gpu_prove_from_external_witness_data<
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
 ) -> CudaResult<GpuProof<H, A>> {
-    let mut stages = stage_timer(Cancellation::Off)?;
+    let mut stages = stage_timer()?;
     let proof = prove_from_witness_data::<TR, H, POW, A>(
         config,
         external_witness_data,
@@ -62,6 +62,10 @@ pub fn gpu_prove_from_external_witness_data<
 
 /// As [`gpu_prove_from_external_witness_data`], but returns `None` when a cancel was
 /// requested through [`prover_stages::cancel`] and proving stopped at a stage boundary.
+///
+/// The timer is the caller's, so these stages join the caller's timeline rather than
+/// opening a second one, and the caller's cancel baseline covers this run.
+#[allow(clippy::too_many_arguments)]
 pub fn gpu_prove_from_external_witness_data_cancellable<
     TR: Transcript<F, CompatibleCap: Hash>,
     H: GpuTreeHasher<Output = TR::CompatibleCap>,
@@ -75,9 +79,9 @@ pub fn gpu_prove_from_external_witness_data_cancellable<
     vk: &VerificationKey<F, H>,
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
+    stages: &mut StageTimer,
 ) -> CudaResult<Option<GpuProof<H, A>>> {
-    let mut stages = stage_timer(Cancellation::On)?;
-    let proof = prove_from_witness_data::<TR, H, POW, A>(
+    prove_from_witness_data::<TR, H, POW, A>(
         config,
         external_witness_data,
         proof_config,
@@ -85,10 +89,8 @@ pub fn gpu_prove_from_external_witness_data_cancellable<
         vk,
         transcript_params,
         worker,
-        &mut stages,
-    )?;
-    stages.finish();
-    Ok(proof)
+        stages,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -149,7 +151,7 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
     worker: &Worker,
     cache_strategy: CacheStrategy,
 ) -> CudaResult<GpuProof<H, A>> {
-    let mut stages = stage_timer(Cancellation::Off)?;
+    let mut stages = stage_timer()?;
     let proof = prove_with_cache_strategy::<TR, H, POW, A>(
         config,
         external_witness_data,
@@ -167,6 +169,8 @@ pub fn gpu_prove_from_external_witness_data_with_cache_strategy<
 
 /// As [`gpu_prove_from_external_witness_data_with_cache_strategy`], but returns `None`
 /// when proving stopped at a stage boundary because a cancel was requested.
+///
+/// The timer is the caller's — see [`gpu_prove_from_external_witness_data_cancellable`].
 #[allow(clippy::too_many_arguments)]
 pub fn gpu_prove_with_cache_strategy_cancellable<
     TR: Transcript<F>,
@@ -182,9 +186,9 @@ pub fn gpu_prove_with_cache_strategy_cancellable<
     transcript_params: TR::TransciptParameters,
     worker: &Worker,
     cache_strategy: CacheStrategy,
+    stages: &mut StageTimer,
 ) -> CudaResult<Option<GpuProof<H, A>>> {
-    let mut stages = stage_timer(Cancellation::On)?;
-    let proof = prove_with_cache_strategy::<TR, H, POW, A>(
+    prove_with_cache_strategy::<TR, H, POW, A>(
         config,
         external_witness_data,
         proof_config,
@@ -193,10 +197,8 @@ pub fn gpu_prove_with_cache_strategy_cancellable<
         transcript_params,
         worker,
         cache_strategy,
-        &mut stages,
-    )?;
-    stages.finish();
-    Ok(proof)
+        stages,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -360,26 +362,20 @@ fn prove_with_cache_strategy<
     result
 }
 
-/// Whether a run's timer honours a cancel request. The entry points that return the proof
-/// itself pick `Off`, since a cancel would have nowhere to go in their return type.
-#[derive(Clone, Copy)]
-enum Cancellation {
-    On,
-    Off,
-}
-
-/// A timer that stays quiet on the dry run pass, which sizes allocations rather than proving.
-fn stage_timer(cancellation: Cancellation) -> CudaResult<StageTimer> {
+/// The timer for the entry points that build their own — the ones returning the proof
+/// itself, where a cancel would have nowhere to go in the return type. The cancellable
+/// twins take the caller's instead.
+///
+/// Stays quiet on the dry run pass, which sizes allocations rather than proving.
+fn stage_timer() -> CudaResult<StageTimer> {
     if is_dry_run()? {
         return Ok(StageTimer::silent());
     }
-    match cancellation {
-        Cancellation::On => Ok(StageTimer::new()),
-        Cancellation::Off => Ok(StageTimer::uncancellable()),
-    }
+
+    Ok(StageTimer::uncancellable())
 }
 
-/// The entry points that build a [`Cancellation::Off`] timer can never be handed `None`.
+/// The entry points that build their own [`stage_timer`] can never be handed `None`.
 /// Funnelling them through here keeps that invariant in one place instead of three.
 fn require_proof<H: GpuTreeHasher, A: GoodAllocator>(
     proof: Option<GpuProof<H, A>>,
