@@ -160,6 +160,10 @@ where
         };
         let worker = Worker::new();
         let precomputation = precomputation.into_inner_ref();
+        // A timeline of its own: this is a trait method, so there is nowhere to carry the
+        // caller's timer. Nothing deployed reaches here — the wrapper duplicates this logic
+        // and threads one timer through — so it is not worth widening the trait for.
+        let mut stages = prover_stages::StageTimer::new();
         let gpu_proof = shivini::gpu_prove_with_cache_strategy_cancellable::<
             CF::ThisLayerTranscript,
             CF::ThisLayerHasher,
@@ -174,11 +178,14 @@ where
             (),
             &worker,
             cache_strategy,
-        )
-        .context("failed to generate gpu compression proof")?
-        .ok_or(prover_stages::Cancelled {
-            stage: "gpu_compression_proof",
-        })?;
+            &mut stages,
+        );
+        stages.finish();
+        let gpu_proof = gpu_proof
+            .context("failed to generate gpu compression proof")?
+            .ok_or(prover_stages::Cancelled {
+                stage: "gpu_compression_proof",
+            })?;
         drop(ctx);
         let proof = gpu_proof.into();
 

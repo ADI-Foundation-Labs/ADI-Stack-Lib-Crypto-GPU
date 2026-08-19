@@ -119,6 +119,7 @@ impl PlonkSnarkWrapper {
             &worker,
             &mut precomputation,
             None,
+            &mut stages,
         )
         .map_err(|e| anyhow::anyhow!("Failed to create proof for PlonkSnarkWrapper: {:?}", e))?
         .ok_or(Cancelled {
